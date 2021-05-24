@@ -1,0 +1,101 @@
+pipeline {
+    agent any
+    options {
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '7'))
+    }
+    stages {
+        stage('Build') {
+            when {
+                expression {
+                    return env.CHANGE_BRANCH != null  || (env.BRANCH_NAME == "master" || env.BRANCH_NAME == "develop" || env.BRANCH_NAME.startsWith("release/") || env.BRANCH_NAME.startsWith("hotfix/") || env.BRANCH_NAME.startsWith("epic/"))
+                }
+            }
+            tools {
+                maven 'maven3.3.9'
+                jdk 'JAVA8'
+            }
+            steps {
+                script {
+                    sh '''
+                        mvn clean verify
+                    '''
+                }
+            }
+        }
+        stage('Pull Request') {
+            when {
+                expression {
+                    env.CHANGE_BRANCH != null
+                }
+            }
+            environment {
+                scannerHome = tool 'sonar-4'
+            }
+            tools {
+                maven 'maven3.3.9'
+                jdk 'JAVA11'
+            }
+            stages {
+                stage('Sonar Analysis') {
+                    steps {
+                        echo '**********SONAR PR: START **********'
+                        sh '''
+                            git fetch --no-tags git@bitbucket.org:<organisation>/<repository-name>.git +refs/heads/''' + env.CHANGE_TARGET + ''':refs/remotes/origin/''' + env.CHANGE_TARGET + '''
+                        '''
+                        withSonarQubeEnv('SonarCloud') {
+                            sh '''
+                                mvn sonar:sonar -Dsonar.pullrequest.provider=vsts -Dsonar.login=${SonarCloud} -Dsonar.pullrequest.key=''' + env.CHANGE_ID + ''' -Dsonar.pullrequest.branch=''' + env.CHANGE_BRANCH + ''' -Dsonar.pullrequest.base=''' + env.CHANGE_TARGET + '''
+                            '''
+                        }
+                        echo '**********SONAR PR: FINISH **********'
+                    }
+                }
+                stage("Quality Gate") {
+                    steps {
+                        timeout(time: 1, unit: 'HOURS') {
+                        waitForQualityGate abortPipeline: true
+                        }
+                    }
+                }
+            }
+        }
+        stage('Branch') {
+            when {
+                expression {
+                    return env.CHANGE_BRANCH == null  && (env.BRANCH_NAME == "master" || env.BRANCH_NAME == "develop" || env.BRANCH_NAME.startsWith("release/") || env.BRANCH_NAME.startsWith("hotfix/") || env.BRANCH_NAME.startsWith("epic/"))
+                }
+            }
+            environment {
+                scannerHome = tool 'sonar-4'
+            }
+            tools {
+                maven 'maven3.3.9'
+                jdk 'JAVA11'
+            }
+            stages {
+                stage('Sonar Analysis') {
+                    steps {
+                        echo '**********SONAR BRANCH: START **********'
+                        sh '''
+                            git fetch --no-tags git@bitbucket.org:<organisation>/<repository-name>.git +refs/heads/develop:refs/remotes/origin/develop
+                        '''
+                        withSonarQubeEnv('SonarCloud') {
+                            sh '''
+                                mvn sonar:sonar -Dsonar.login=${SonarCloud} -Dsonar.branch.name=''' + env.BRANCH_NAME + '''
+                            '''
+                        }
+                        echo '**********SONAR BRANCH: FINISH **********'
+                    }
+                }
+                stage("Quality Gate") {
+                    steps {
+                        timeout(time: 1, unit: 'HOURS') {
+                        waitForQualityGate abortPipeline: true
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
