@@ -1,5 +1,5 @@
 # Code Coverage Analysis using JaCoCo & Sonar
-A basic maven multi-module project codebase to help understand the following blog post - <Insert blog post>
+A basic maven multi-module project codebase to help understand [this blog post!](https://medium.com/miq-tech-and-analytics/automated-code-coverage-quality-gate-analysis-for-maven-multi-module-project-on-bitbucket-using-ed0cafab5ffc)
 ## Basic Example
 Run the below command -
 ```sh
